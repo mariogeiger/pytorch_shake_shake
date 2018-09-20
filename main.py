@@ -68,6 +68,7 @@ def parse_args():
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--nesterov', type=str2bool, default=True)
     parser.add_argument('--lr_min', type=float, default=0)
+    parser.add_argument('--criterion', type=str, choice={"cross-entropy", "quadratic-hinge"}, required=True)
 
     # TensorBoard
     parser.add_argument(
@@ -96,6 +97,7 @@ def parse_args():
         ('momentum', args.momentum),
         ('nesterov', args.nesterov),
         ('lr_min', args.lr_min),
+        ('criterion', args.criterion),
     ])
 
     data_config = OrderedDict([
@@ -159,6 +161,15 @@ def get_cosine_annealing_scheduler(optimizer, optim_config):
             optim_config['lr_min'] / optim_config['base_lr']))
 
     return scheduler
+
+
+def quadratic_hinge_loss(output, target):
+    binary_target = output.new_empty(*output.size()).fill_(-1)
+    for i in range(len(target)):
+        binary_target[i, target[i]] = 1
+    delta = 1 - binary_target * output
+    delta[delta <= 0] = 0
+    return 0.5 * delta.pow(2).sum(1).mean()
 
 
 def train(epoch, model, optimizer, scheduler, criterion, train_loader,
@@ -319,8 +330,11 @@ def main():
     model.cuda()
     n_params = sum([param.view(-1).size()[0] for param in model.parameters()])
     logger.info('n_params: {}'.format(n_params))
-
-    criterion = nn.CrossEntropyLoss(size_average=True)
+    
+    if optim_config['criterion'] == "cross-entropy":
+        criterion = nn.CrossEntropyLoss(size_average=True)
+    if optim_config['criterion'] == "quadratic-hinge":
+        criterion = quadratic_hinge_loss
 
     optim_config['steps_per_epoch'] = len(train_loader)
     # optimizer
