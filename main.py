@@ -169,7 +169,7 @@ def quadratic_hinge_loss(output, target):
         binary_target[i, target[i]] = 1
     delta = 1 - binary_target * output
     delta[delta <= 0] = 0
-    return 0.5 * delta.pow(2).sum(1).mean()
+    return 0.5 * delta.pow(2).mean()
 
 
 def train(epoch, model, optimizer, scheduler, criterion, train_loader,
