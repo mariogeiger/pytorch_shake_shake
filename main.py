@@ -68,7 +68,7 @@ def parse_args():
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--nesterov', type=str2bool, default=True)
     parser.add_argument('--lr_min', type=float, default=0)
-    parser.add_argument('--criterion', type=str, choice={"cross-entropy", "quadratic-hinge"}, required=True)
+    parser.add_argument('--criterion', type=str, choices={"cross-entropy", "quadratic-hinge"}, required=True)
 
     # TensorBoard
     parser.add_argument(
