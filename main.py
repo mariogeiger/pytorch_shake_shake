@@ -165,8 +165,7 @@ def get_cosine_annealing_scheduler(optimizer, optim_config):
 
 def quadratic_hinge_loss(output, target):
     binary_target = output.new_empty(*output.size()).fill_(-1)
-    for i in range(len(target)):
-        binary_target[i, target[i]] = 1
+    binary_target.scatter_(1, target.view(-1, 1), 1)
     delta = 1 - binary_target * output
     delta[delta <= 0] = 0
     return 0.5 * delta.pow(2).mean()
@@ -174,8 +173,7 @@ def quadratic_hinge_loss(output, target):
 
 def linear_hinge_loss(output, target):
     binary_target = output.new_empty(*output.size()).fill_(-1)
-    for i in range(len(target)):
-        binary_target[i, target[i]] = 1
+    binary_target.scatter_(1, target.view(-1, 1), 1)
     delta = 1 - binary_target * output
     delta[delta <= 0] = 0
     return delta.mean()
