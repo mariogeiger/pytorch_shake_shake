@@ -68,6 +68,9 @@ def parse_args():
     parser.add_argument('--lr_min', type=float, default=0)
     parser.add_argument('--criterion', type=str, choices={"cross-entropy", "quadratic-hinge", "linear-hinge"}, required=True)
 
+    # data config
+    parser.add_argument('--train_size', type=int)
+
     # TensorBoard
     parser.add_argument(
         '--tensorboard', dest='tensorboard', action='store_true')
@@ -100,6 +103,7 @@ def parse_args():
 
     data_config = OrderedDict([
         ('dataset', 'CIFAR10'),
+        ('train_size', args.train_size),
     ])
 
     run_config = OrderedDict([
@@ -334,6 +338,7 @@ def main():
 
     run_config = config['run_config']
     optim_config = config['optim_config']
+    data_config = config['data_config']
 
     # set random seed
     seed = run_config['seed']
@@ -355,7 +360,8 @@ def main():
         json.dump(config, fout, indent=2)
 
     # data loaders
-    train_loader, test_loader = get_loader(optim_config['batch_size'],
+    train_loader, test_loader = get_loader(data_config['train_size'],
+                                           optim_config['batch_size'],
                                            run_config['num_workers'],
                                            run_config['device'] != 'cpu')
 
