@@ -347,6 +347,7 @@ def main0():
     parser.add_argument('--shake_image', type=str2bool, default=True)
 
     # run config
+    parser.add_argument("--pickle", type=str, required=True)
     parser.add_argument('--outdir', type=str, required=True)
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--num_workers', type=int, default=7)
