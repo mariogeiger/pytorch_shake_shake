@@ -2,25 +2,28 @@
 # pylint: disable=R, C, no-member, global-statement, logging-format-interpolation
 
 import argparse
-from collections import OrderedDict
 import importlib
 import json
 import logging
+import os
 import pathlib
 import random
 import time
-import numpy as np
+from collections import OrderedDict
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
+
+from dataloader import get_loader
+
 try:
     from tensorboardX import SummaryWriter  # pylint: disable=import-error
     is_tensorboard_available = True
 except ModuleNotFoundError:
     is_tensorboard_available = False
 
-from dataloader import get_loader
 
 torch.backends.cudnn.benchmark = True
 
@@ -40,88 +43,6 @@ def str2bool(s):
         return False
     else:
         raise RuntimeError('Boolean value expected')
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    # model config
-    parser.add_argument('--depth', type=int, required=True)
-    parser.add_argument('--base_channels', type=int, required=True)
-
-    parser.add_argument('--shake_forward', type=str2bool, default=True)
-    parser.add_argument('--shake_backward', type=str2bool, default=True)
-    parser.add_argument('--shake_image', type=str2bool, default=True)
-
-    # run config
-    parser.add_argument('--outdir', type=str, required=True)
-    parser.add_argument('--seed', type=int, default=17)
-    parser.add_argument('--num_workers', type=int, default=7)
-    parser.add_argument('--device', type=str, default='cuda')
-
-    # optim config
-    parser.add_argument('--epochs', type=int, default=1800)
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--base_lr', type=float, default=0.2)
-    parser.add_argument('--weight_decay', type=float, default=1e-4)
-    parser.add_argument('--momentum', type=float, default=0.9)
-    parser.add_argument('--nesterov', type=str2bool, default=True)
-    parser.add_argument('--lr_min', type=float, default=0)
-    parser.add_argument('--criterion', type=str, choices={"cross-entropy", "quadratic-hinge", "linear-hinge"}, required=True)
-
-    # data config
-    parser.add_argument('--train_size', type=int)
-
-    # TensorBoard
-    parser.add_argument(
-        '--tensorboard', dest='tensorboard', action='store_true')
-
-    args = parser.parse_args()
-    if not is_tensorboard_available:
-        args.tensorboard = False
-
-    model_config = OrderedDict([
-        ('arch', 'shake_shake'),
-        ('depth', args.depth),
-        ('base_channels', args.base_channels),
-        ('shake_forward', args.shake_forward),
-        ('shake_backward', args.shake_backward),
-        ('shake_image', args.shake_image),
-        ('input_shape', (1, 3, 32, 32)),
-        ('n_classes', 10),
-    ])
-
-    optim_config = OrderedDict([
-        ('epochs', args.epochs),
-        ('batch_size', args.batch_size),
-        ('base_lr', args.base_lr),
-        ('weight_decay', args.weight_decay),
-        ('momentum', args.momentum),
-        ('nesterov', args.nesterov),
-        ('lr_min', args.lr_min),
-        ('criterion', args.criterion),
-    ])
-
-    data_config = OrderedDict([
-        ('dataset', 'CIFAR10'),
-        ('train_size', args.train_size),
-    ])
-
-    run_config = OrderedDict([
-        ('seed', args.seed),
-        ('outdir', args.outdir),
-        ('num_workers', args.num_workers),
-        ('device', args.device),
-        ('tensorboard', args.tensorboard),
-    ])
-
-    config = OrderedDict([
-        ('model_config', model_config),
-        ('optim_config', optim_config),
-        ('data_config', data_config),
-        ('run_config', run_config),
-    ])
-
-    return config
 
 
 def load_model(config):
@@ -331,9 +252,8 @@ def test(epoch, model, criterion, test_loader, run_config, writer):
     return test_log
 
 
-def main():
+def main(config):
     # parse command line arguments
-    config = parse_args()
     logger.info(json.dumps(config, indent=2))
 
     run_config = config['run_config']
@@ -413,7 +333,98 @@ def main():
         ])
         model_path = outdir / 'model_state.pth'
         torch.save(state, model_path)
+    return state
+
+
+def main0():
+    parser = argparse.ArgumentParser()
+    # model config
+    parser.add_argument('--depth', type=int, required=True)
+    parser.add_argument('--base_channels', type=int, required=True)
+
+    parser.add_argument('--shake_forward', type=str2bool, default=True)
+    parser.add_argument('--shake_backward', type=str2bool, default=True)
+    parser.add_argument('--shake_image', type=str2bool, default=True)
+
+    # run config
+    parser.add_argument('--outdir', type=str, required=True)
+    parser.add_argument('--seed', type=int, default=17)
+    parser.add_argument('--num_workers', type=int, default=7)
+    parser.add_argument('--device', type=str, default='cuda')
+
+    # optim config
+    parser.add_argument('--epochs', type=int, default=1800)
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--base_lr', type=float, default=0.2)
+    parser.add_argument('--weight_decay', type=float, default=1e-4)
+    parser.add_argument('--momentum', type=float, default=0.9)
+    parser.add_argument('--nesterov', type=str2bool, default=True)
+    parser.add_argument('--lr_min', type=float, default=0)
+    parser.add_argument('--criterion', type=str, choices={"cross-entropy", "quadratic-hinge", "linear-hinge"}, required=True)
+
+    # data config
+    parser.add_argument('--train_size', type=int)
+
+    # TensorBoard
+    parser.add_argument(
+        '--tensorboard', dest='tensorboard', action='store_true')
+
+    args = parser.parse_args()
+    if not is_tensorboard_available:
+        args.tensorboard = False
+
+    model_config = OrderedDict([
+        ('arch', 'shake_shake'),
+        ('depth', args.depth),
+        ('base_channels', args.base_channels),
+        ('shake_forward', args.shake_forward),
+        ('shake_backward', args.shake_backward),
+        ('shake_image', args.shake_image),
+        ('input_shape', (1, 3, 32, 32)),
+        ('n_classes', 10),
+    ])
+
+    optim_config = OrderedDict([
+        ('epochs', args.epochs),
+        ('batch_size', args.batch_size),
+        ('base_lr', args.base_lr),
+        ('weight_decay', args.weight_decay),
+        ('momentum', args.momentum),
+        ('nesterov', args.nesterov),
+        ('lr_min', args.lr_min),
+        ('criterion', args.criterion),
+    ])
+
+    data_config = OrderedDict([
+        ('dataset', 'CIFAR10'),
+        ('train_size', args.train_size),
+    ])
+
+    run_config = OrderedDict([
+        ('seed', args.seed),
+        ('outdir', args.outdir),
+        ('num_workers', args.num_workers),
+        ('device', args.device),
+        ('tensorboard', args.tensorboard),
+    ])
+
+    config = OrderedDict([
+        ('model_config', model_config),
+        ('optim_config', optim_config),
+        ('data_config', data_config),
+        ('run_config', run_config),
+    ])
+
+    torch.save(args, args.pickle)
+    try:
+        res = main(config)
+        with open(args.pickle, 'wb') as f:
+            torch.save(args, f)
+            torch.save(res, f)
+    except:
+        os.remove(args.pickle)
+        raise
 
 
 if __name__ == '__main__':
-    main()
+    main0()
