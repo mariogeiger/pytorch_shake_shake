@@ -1,22 +1,18 @@
 #!/usr/bin/env python
-# coding: utf-8
 
-import os
-import time
+import argparse
+from collections import OrderedDict
 import importlib
 import json
-from collections import OrderedDict
 import logging
-import argparse
-import numpy as np
+import pathlib
 import random
+import time
+import numpy as np
 
 import torch
 import torch.nn as nn
-import torch.optim
-import torch.utils.data
-import torch.backends.cudnn
-import torchvision.utils
+import torchvision
 try:
     from tensorboardX import SummaryWriter
     is_tensorboard_available = True
@@ -59,6 +55,7 @@ def parse_args():
     parser.add_argument('--outdir', type=str, required=True)
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--num_workers', type=int, default=7)
+    parser.add_argument('--device', type=str, default='cuda')
 
     # optim config
     parser.add_argument('--epochs', type=int, default=1800)
@@ -108,6 +105,7 @@ def parse_args():
         ('seed', args.seed),
         ('outdir', args.outdir),
         ('num_workers', args.num_workers),
+        ('device', args.device),
         ('tensorboard', args.tensorboard),
     ])
 
@@ -127,7 +125,7 @@ def load_model(config):
     return Network(config)
 
 
-class AverageMeter(object):
+class AverageMeter:
     def __init__(self):
         self.reset()
 
@@ -186,6 +184,7 @@ def train(epoch, model, optimizer, scheduler, criterion, train_loader,
     logger.info('Train {}'.format(epoch))
 
     model.train()
+    device = torch.device(run_config['device'])
 
     loss_meter = AverageMeter()
     accuracy_meter = AverageMeter()
@@ -203,8 +202,8 @@ def train(epoch, model, optimizer, scheduler, criterion, train_loader,
             writer.add_scalar('Train/LearningRate',
                               scheduler.get_lr()[0], global_step)
 
-        data = data.cuda()
-        targets = targets.cuda()
+        data = data.to(device)
+        targets = targets.to(device)
 
         optimizer.zero_grad()
 
@@ -250,36 +249,49 @@ def train(epoch, model, optimizer, scheduler, criterion, train_loader,
         writer.add_scalar('Train/Accuracy', accuracy_meter.avg, epoch)
         writer.add_scalar('Train/Time', elapsed, epoch)
 
+    train_log = OrderedDict({
+        'epoch':
+        epoch,
+        'train':
+        OrderedDict({
+            'loss': loss_meter.avg,
+            'accuracy': accuracy_meter.avg,
+            'time': elapsed,
+        }),
+    })
+    return train_log
+
 
 def test(epoch, model, criterion, test_loader, run_config, writer):
     logger.info('Test {}'.format(epoch))
 
     model.eval()
+    device = torch.device(run_config['device'])
 
     loss_meter = AverageMeter()
     correct_meter = AverageMeter()
     start = time.time()
-    for step, (data, targets) in enumerate(test_loader):
-        if run_config['tensorboard'] and epoch == 0 and step == 0:
-            image = torchvision.utils.make_grid(
-                data, normalize=True, scale_each=True)
-            writer.add_image('Test/Image', image, epoch)
+    with torch.no_grad():
+        for step, (data, targets) in enumerate(test_loader):
+            if run_config['tensorboard'] and epoch == 0 and step == 0:
+                image = torchvision.utils.make_grid(
+                    data, normalize=True, scale_each=True)
+                writer.add_image('Test/Image', image, epoch)
 
-        data = data.cuda()
-        targets = targets.cuda()
+            data = data.to(device)
+            targets = targets.to(device)
 
-        with torch.no_grad():
             outputs = model(data)
-        loss = criterion(outputs, targets)
+            loss = criterion(outputs, targets)
 
-        _, preds = torch.max(outputs, dim=1)
+            _, preds = torch.max(outputs, dim=1)
 
-        loss_ = loss.item()
-        correct_ = preds.eq(targets).sum().item()
-        num = data.size(0)
+            loss_ = loss.item()
+            correct_ = preds.eq(targets).sum().item()
+            num = data.size(0)
 
-        loss_meter.update(loss_, num)
-        correct_meter.update(correct_, 1)
+            loss_meter.update(loss_, num)
+            correct_meter.update(correct_, 1)
 
     accuracy = correct_meter.sum / len(test_loader.dataset)
 
@@ -298,7 +310,17 @@ def test(epoch, model, criterion, test_loader, run_config, writer):
         for name, param in model.named_parameters():
             writer.add_histogram(name, param, global_step)
 
-    return accuracy
+    test_log = OrderedDict({
+        'epoch':
+        epoch,
+        'test':
+        OrderedDict({
+            'loss': loss_meter.avg,
+            'accuracy': accuracy,
+            'time': elapsed,
+        }),
+    })
+    return test_log
 
 
 def main():
@@ -309,9 +331,6 @@ def main():
     run_config = config['run_config']
     optim_config = config['optim_config']
 
-    # TensorBoard SummaryWriter
-    writer = SummaryWriter() if run_config['tensorboard'] else None
-
     # set random seed
     seed = run_config['seed']
     torch.manual_seed(seed)
@@ -319,27 +338,31 @@ def main():
     random.seed(seed)
 
     # create output directory
-    outdir = run_config['outdir']
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    outdir = pathlib.Path(run_config['outdir'])
+    outdir.mkdir(exist_ok=True, parents=True)
+
+    # TensorBoard SummaryWriter
+    writer = SummaryWriter(
+        outdir.as_posix()) if run_config['tensorboard'] else None
 
     # save config as json file in output directory
-    outpath = os.path.join(outdir, 'config.json')
+    outpath = outdir / 'config.json'
     with open(outpath, 'w') as fout:
         json.dump(config, fout, indent=2)
 
     # data loaders
     train_loader, test_loader = get_loader(optim_config['batch_size'],
-                                           run_config['num_workers'])
+                                           run_config['num_workers'],
+                                           run_config['device'] != 'cpu')
 
     # model
     model = load_model(config['model_config'])
-    model.cuda()
+    model.to(torch.device(run_config['device']))
     n_params = sum([param.view(-1).size()[0] for param in model.parameters()])
     logger.info('n_params: {}'.format(n_params))
-    
+
     if optim_config['criterion'] == "cross-entropy":
-        criterion = nn.CrossEntropyLoss(size_average=True)
+        criterion = nn.CrossEntropyLoss(reduction='mean')
     if optim_config['criterion'] == "quadratic-hinge":
         criterion = quadratic_hinge_loss
     if optim_config['criterion'] == "linear-hinge":
@@ -358,25 +381,28 @@ def main():
     # run test before start training
     test(0, model, criterion, test_loader, run_config, writer)
 
+    epoch_logs = []
     for epoch in range(1, optim_config['epochs'] + 1):
-        train(epoch, model, optimizer, scheduler, criterion, train_loader,
-              run_config, writer)
-        accuracy = test(epoch, model, criterion, test_loader, run_config,
+        train_log = train(epoch, model, optimizer, scheduler, criterion,
+                          train_loader, run_config, writer)
+        test_log = test(epoch, model, criterion, test_loader, run_config,
                         writer)
+
+        epoch_log = train_log.copy()
+        epoch_log.update(test_log)
+        epoch_logs.append(epoch_log)
+        with open(outdir / 'log.json', 'w') as fout:
+            json.dump(epoch_logs, fout, indent=2)
 
         state = OrderedDict([
             ('config', config),
             ('state_dict', model.state_dict()),
             ('optimizer', optimizer.state_dict()),
             ('epoch', epoch),
-            ('accuracy', accuracy),
+            ('accuracy', test_log['test']['accuracy']),
         ])
-        model_path = os.path.join(outdir, 'model_state.pth')
+        model_path = outdir / 'model_state.pth'
         torch.save(state, model_path)
-
-    if run_config['tensorboard']:
-        outpath = os.path.join(outdir, 'all_scalars.json')
-        writer.export_scalars_to_json(outpath)
 
 
 if __name__ == '__main__':
