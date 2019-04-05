@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# pylint: disable=R, C, no-member, global-statement, logging-format-interpolation
 
 import argparse
 from collections import OrderedDict
@@ -14,9 +15,9 @@ import torch
 import torch.nn as nn
 import torchvision
 try:
-    from tensorboardX import SummaryWriter
+    from tensorboardX import SummaryWriter  # pylint: disable=import-error
     is_tensorboard_available = True
-except Exception:
+except ModuleNotFoundError:
     is_tensorboard_available = False
 
 from dataloader import get_loader
@@ -127,7 +128,10 @@ def load_model(config):
 
 class AverageMeter:
     def __init__(self):
-        self.reset()
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
 
     def reset(self):
         self.val = 0
@@ -366,7 +370,7 @@ def main():
     if optim_config['criterion'] == "quadratic-hinge":
         criterion = quadratic_hinge_loss
     if optim_config['criterion'] == "linear-hinge":
-    	criterion = linear_hinge_loss
+        criterion = linear_hinge_loss
 
     optim_config['steps_per_epoch'] = len(train_loader)
     # optimizer
