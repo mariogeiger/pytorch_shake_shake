@@ -354,7 +354,7 @@ def main0():
     parser.add_argument('--device', type=str, default='cuda')
 
     # optim config
-    parser.add_argument('--epochs', type=int, default=1800)
+    parser.add_argument('--steps', type=int, default=703125)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--base_lr', type=float, default=0.2)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
@@ -364,7 +364,7 @@ def main0():
     parser.add_argument('--criterion', type=str, choices={"cross-entropy", "quadratic-hinge", "linear-hinge"}, required=True)
 
     # data config
-    parser.add_argument('--train_size', type=int)
+    parser.add_argument('--train_size', type=int, default=50000)
 
     # TensorBoard
     parser.add_argument(
@@ -386,7 +386,8 @@ def main0():
     ])
 
     optim_config = OrderedDict([
-        ('epochs', args.epochs),
+        ('epochs', args.steps * args.batch_size // args.train_size),
+        ('steps', args.steps),
         ('batch_size', args.batch_size),
         ('base_lr', args.base_lr),
         ('weight_decay', args.weight_decay),
