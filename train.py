@@ -252,7 +252,7 @@ def test(epoch, model, criterion, test_loader, run_config, writer):
     return test_log
 
 
-def main(config):
+def main(args, config):
     # parse command line arguments
     logger.info(json.dumps(config, indent=2))
 
@@ -331,8 +331,11 @@ def main(config):
             ('epoch', epoch),
             ('accuracy', test_log['test']['accuracy']),
         ])
-        model_path = outdir / 'model_state.pth'
-        torch.save(state, model_path)
+
+        with open(args.pickle, 'wb') as f:
+            torch.save(args, f)
+            torch.save(state, f)
+
     return state
 
 
@@ -348,7 +351,6 @@ def main0():
 
     # run config
     parser.add_argument("--pickle", type=str, required=True)
-    parser.add_argument('--outdir', type=str, required=True)
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--num_workers', type=int, default=7)
     parser.add_argument('--device', type=str, default='cuda')
@@ -404,7 +406,7 @@ def main0():
 
     run_config = OrderedDict([
         ('seed', args.seed),
-        ('outdir', args.outdir),
+        ('outdir', os.path.splitext(args.pickle)[0]),
         ('num_workers', args.num_workers),
         ('device', args.device),
         ('tensorboard', args.tensorboard),
@@ -419,7 +421,7 @@ def main0():
 
     torch.save(args, args.pickle)
     try:
-        res = main(config)
+        res = main(args, config)
         with open(args.pickle, 'wb') as f:
             torch.save(args, f)
             torch.save(res, f)
