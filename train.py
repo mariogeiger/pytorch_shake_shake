@@ -181,6 +181,8 @@ def train(epoch, model, optimizer, scheduler, criterion, train_loader,
     train_log = OrderedDict({
         'epoch':
         epoch,
+        'step':
+        global_step,
         'train':
         OrderedDict({
             'loss': loss_meter.avg,
@@ -242,6 +244,8 @@ def test(epoch, model, criterion, test_loader, run_config, writer):
     test_log = OrderedDict({
         'epoch':
         epoch,
+        'step':
+        global_step,
         'test':
         OrderedDict({
             'loss': loss_meter.avg,
@@ -312,7 +316,7 @@ def main(args, config):
     test(0, model, criterion, test_loader, run_config, writer)
 
     epoch_logs = []
-    for epoch in range(1, optim_config['epochs'] + 1):
+    for epoch in range(1, 10 * optim_config['epochs'] + 1):
         train_log = train(epoch, model, optimizer, scheduler, criterion,
                           train_loader, run_config, writer)
         test_log = test(epoch, model, criterion, test_loader, run_config,
@@ -328,13 +332,16 @@ def main(args, config):
             ('config', config),
             ('state_dict', model.state_dict()),
             ('optimizer', optimizer.state_dict()),
-            ('epoch', epoch),
-            ('accuracy', test_log['test']['accuracy']),
+            ('logs', epoch_logs),
         ])
 
         with open(args.pickle, 'wb') as f:
             torch.save(args, f)
             torch.save(state, f)
+
+        if global_step > optim_config['steps']:
+            break
+
 
     return state
 
